@@ -211,6 +211,13 @@ void TDB_DrawCirc(const char * c, int x, int y, int r) {
   }
 }
 
+void TDB_DrawASCII(char ** l, int r, int x, int y) {
+  for (int py = 0; py < r; py++) {
+    TDB_SetCursor(x, y + py);
+    TDB_Write(l[py]); 
+  }
+}
+
 TDB_BitMap TDB_LoadBitMap(const char * file) {
   TDB_BitMap bitmap;
   FILE * stream = fopen(file, "r");
