@@ -14,8 +14,7 @@ int main() {
     if (s.x != ps.x || s.y != ps.y) {
       TDB_Clear();
       TDB_DrawBitMap(&image, TDB_PIXEL_CIRCLE, (s.col - image.width * 2) / 2, (s.row - image.height) / 2, 2);
-      TDB_SetCursor(2, 0);
-      TDB_Write("I use arch btw!");
+      TDB_Write("I use arch btw!", 2, 0);
     }
 
     ps = s;

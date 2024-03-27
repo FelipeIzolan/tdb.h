@@ -54,8 +54,8 @@ static struct termios _default;
 static void beforeExit();
 void TDB_Setup(int blocking);
 
-void TDB_Write(const char * t);
-void TDB_WriteF(const char * t, ...);
+void TDB_Write(const char * t, int x, int y);
+void TDB_WriteF(int x, int y, const char * t, ...);
 void TDB_Clear();
 
 void TDB_SetCursor(int col, int row);
@@ -75,22 +75,11 @@ void TDB_DestroyBitMap(TDB_BitMap * bitmap);
 
 // --------------------------------------------------------------------------------------------------
 
-void TDB_Write(const char * t) {
-  write(STDOUT_FILENO, t, strlen(t));
-}
-
-void TDB_WriteF(const char * t, ...) {
-  va_list args;
+void TDB_SetCursor(int col, int row) {
   char buffer[256];
 
-  va_start(args, t);
-  vsprintf(buffer, t, args);
-  TDB_Write(buffer);
-  va_end(args);
-}
-
-void TDB_Clear() {
-  TDB_Write("\x1b[2J\x1b[H");
+  sprintf(buffer, "\x1b[%i;%iH", row, col);
+  write(STDOUT_FILENO, buffer, strlen(buffer));
 }
 
 TDB_Cursor TDB_GetCursor() {
@@ -122,13 +111,29 @@ TDB_Cursor TDB_GetCursor() {
   return (TDB_Cursor) { atoi(col), atoi(row) }; 
 }
 
-void TDB_SetCursor(int col, int row) {
-  TDB_WriteF("\x1b[%i;%iH", row, col);
+void TDB_Write(const char * t, int x, int y) {
+  TDB_SetCursor(x, y);
+  write(STDOUT_FILENO, t, strlen(t));
+}
+
+void TDB_WriteF(int x, int y, const char * t, ...) {
+  va_list args;
+  char buffer[256];
+
+  va_start(args, t);
+  vsprintf(buffer, t, args);
+  TDB_Write(buffer, x, y);
+  va_end(args);
+}
+
+void TDB_Clear() {
+  TDB_Write("\x1b[2J\x1b[H", 0, 0);
 }
 
 static void beforeExit() {
   tcsetattr(STDIN_FILENO, TCSANOW, &_default);
-  TDB_Write("\x1b[?25h"); // show-cursor
+  TDB_Write("\x1b[?25h", 0, 0); // show-cursor
+  TDB_Clear();
 }
 
 void TDB_Setup(int blocking) {
@@ -143,7 +148,7 @@ void TDB_Setup(int blocking) {
   raw.c_cc[VTIME] = blocking;
   
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-  TDB_Write("\x1b[?25l"); // hide-cursor
+  TDB_Write("\x1b[?25l", 0, 0); // hide-cursor
 }
 
 int TDB_GetKey() {
@@ -172,14 +177,12 @@ TDB_Size TDB_GetSize() {
   return (TDB_Size) { w.ws_col, w.ws_row, w.ws_xpixel, w.ws_ypixel };
 }
 
-
 void TDB_DrawLine(const char * c, int x1, int y1, int x2, int y2) {
   for (float i = 0; i < 1; i += 0.01) {
     int px = ceil(x1 + (x2 - x1) * i);
     int py = ceil(y1 + (y2 - y1) * i);
     
-    TDB_SetCursor(px, py);
-    TDB_Write(c);
+    TDB_Write(c, px, py);
   }
 }
 
@@ -206,15 +209,13 @@ void TDB_DrawCirc(const char * c, int x, int y, int r) {
     int px = round(2 * r * sin(a) + x);
     int py = round(y + r * cos(a));
 
-    TDB_SetCursor(px, py);
-    TDB_Write(c);
+    TDB_Write(c, px, py);
   }
 }
 
 void TDB_DrawASCII(char ** l, int r, int x, int y) {
   for (int py = 0; py < r; py++) {
-    TDB_SetCursor(x, y + py);
-    TDB_Write(l[py]); 
+    TDB_Write(l[py], x, y + py); 
   }
 }
 
@@ -238,11 +239,12 @@ TDB_BitMap TDB_LoadBitMap(const char * file) {
 
   fseek(stream, 2, SEEK_CUR);
   fread(&bit_per_pixel, 2, 1, stream);
+
   bitmap.bytes_per_pixel = bit_per_pixel / 8;
   bitmap.row_size = (bit_per_pixel * bitmap.width + 31) / 32 * 4;
+  bitmap.data = (uint8_t *) malloc((bitmap.width * bitmap.height) * bitmap.bytes_per_pixel);
 
   fseek(stream, offset, SEEK_SET);
-  bitmap.data = (uint8_t *) malloc((bitmap.width * bitmap.height) * bitmap.bytes_per_pixel);
   fread(bitmap.data, bitmap.bytes_per_pixel, bitmap.width * bitmap.height, stream);
 
   return bitmap;
@@ -255,8 +257,7 @@ void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y, int a) {
       if (bitmap->data[of+3] == 0) continue;
 
       for (int p = 0; p < a; p++) {
-        TDB_SetCursor(x + (px * a) - p, y + bitmap->height - py);
-        TDB_WriteF("\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
+        TDB_WriteF(x + (px * a) - p, y + bitmap->height - py, "\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
       }
     }
   }

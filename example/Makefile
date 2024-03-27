@@ -1,2 +1,2 @@
 all:
-	$(CC) -lm example.c
+	$(CC) -lm main.c
