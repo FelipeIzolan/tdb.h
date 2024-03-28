@@ -18,7 +18,7 @@ int main() {
 
     if (s.col != ps.col || s.row != ps.row) {
       TDB_Clear();
-      TDB_DrawBitMap(&image, TDB_PIXEL_CIRCLE, (s.col - image.width * 2) / 2, (s.row - image.height) / 2);
+      TDB_DrawBitMap(&image, TDB_PIXEL2, (s.col - image.width * 2) / 2, (s.row - image.height) / 2);
       TDB_Write("I use arch btw!", 2, 0);
     }
 

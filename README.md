@@ -12,19 +12,18 @@ int main() {
   TDB_Setup(1); // <- 0 to non-blocking
 
   bool will_render = 1;
-  TDB_Size prev_size;
+  TDB_Pos prev_size;
 
   while (1) {
     int k = TDB_GetKey();
-    TDB_Size s = TDB_GetSize();
+    TDB_Pos s = TDB_GetSize();
 
     if (k == 'q' || k == TDB_UP) break;
-    if (s.x != prev_size.x || s.y != prev_size.y) will_render = 1;
+    if (s.col != prev_size.col || s.col != prev_size.col) will_render = 1;
 
     if (will_render) {
       TDB_Clear();
-      TDB_SetCursor((s.col - 13) / 2, s.row / 2);
-      TDB_Write("Hello, World!");
+      TDB_Write("Hello, World!", (s.col - 13) / 2, s.row / 2);
       will_render = 0;
     }
 

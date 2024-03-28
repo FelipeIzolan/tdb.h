@@ -10,10 +10,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TDB_PIXEL "█"
-#define TDB_PIXEL_QUOTE "#"
-#define TDB_PIXEL_CIRCLE "●"
-#define TDB_PIXEL_SQUARE "◼"
+#define TDB_PIXEL "██"
+#define TDB_PIXEL1 "##"
+#define TDB_PIXEL2 "●●"
+#define TDB_PIXEL3 "◼◼"
+#define TDB_PIXEL4 "@@"
+#define TDB_PIXEL5 "//"
 
 #ifdef __unix__
 #include <termios.h>
@@ -302,11 +304,9 @@ void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y) {
   for (int px = 0; px < bitmap->width; px++) {
     for (int py = 0; py < bitmap->height; py++) {
       unsigned int of = bitmap->row_size * py + bitmap->bytes_per_pixel * px;
-      if (bitmap->data[of+3] == 0) continue;
+      if (bitmap->bytes_per_pixel > 3 && bitmap->data[of+3] == 0) continue;
 
-      for (int p = 0; p < 2; p++) {
-        TDB_WriteF(x + (px * 2) - p, y + bitmap->height - py, "\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
-      }
+      TDB_WriteF(x + (px * 2), y + bitmap->height - py, "\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
     }
   }
 }
