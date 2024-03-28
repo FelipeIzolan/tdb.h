@@ -9,15 +9,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <termios.h>
-
-#include <sys/ioctl.h>
-#include <sys/types.h>
 
 #define TDB_PIXEL "█"
 #define TDB_PIXEL_QUOTE "#"
 #define TDB_PIXEL_CIRCLE "●"
 #define TDB_PIXEL_SQUARE "◼"
+
+#ifdef __unix__
+#include <termios.h>
+#include <sys/ioctl.h>
+static struct termios _default; 
+#endif
+
+#ifdef _WIN32
+#include <conio.h>
+#include <windows.h>
+static DWORD _default;
+static HANDLE _input;
+static HANDLE _output;
+#endif
 
 enum TDB_Keys {
   TDB_SPACE = 32,
@@ -30,27 +40,19 @@ enum TDB_Keys {
   TDB_END
 };
 
-typedef struct TDB_Size { 
+typedef struct TDB_Pos { 
   int col;
   int row;
-  int x;
-  int y;
-} TDB_Size;
-
-typedef struct TDB_Cursor {
-  int col;
-  int row;
-} TDB_Cursor;
+} TDB_Pos;
 
 typedef struct TDB_BitMap {
-  ushort width;
-  ushort height;
-  ushort row_size;
-  ushort bytes_per_pixel;
+  unsigned short width;
+  unsigned short height;
+  unsigned short row_size;
+  unsigned short bytes_per_pixel;
   uint8_t * data;
 } TDB_BitMap;
 
-static struct termios _default;
 static void beforeExit();
 void TDB_Setup(int blocking);
 
@@ -60,8 +62,12 @@ void TDB_Clear();
 
 void TDB_SetCursor(int col, int row);
 
-TDB_Cursor TDB_GetCursor();
-TDB_Size TDB_GetSize();
+void TDB_ShowCursor();
+void TDB_HideCursor();
+TDB_Pos TDB_GetCursor();
+void TDB_SetCursor(int col, int row);
+
+TDB_Pos TDB_GetSize();
 int TDB_GetKey();
 
 void TDB_DrawLine(const char * c, int x1, int y1, int x2, int y2);
@@ -70,10 +76,18 @@ void TDB_DrawTria(const char * c, int x, int y, int x1, int y1, int x2, int y2);
 void TDB_DrawCirc(const char * c, int x, int y, int r);
 
 TDB_BitMap TDB_LoadBitMap(const char * file);
-void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y, int a);
+void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y);
 void TDB_DestroyBitMap(TDB_BitMap * bitmap);
 
-// --------------------------------------------------------------------------------------------------
+/*// --------------------------------------------------------------------------------------------------*/
+
+void TDB_ShowCursor() {
+  TDB_Write("\x1b[?25h", 0, 0);
+}
+
+void TDB_HideCursor() {
+  TDB_Write("\x1b[?25l", 0, 0); 
+}
 
 void TDB_SetCursor(int col, int row) {
   char buffer[256];
@@ -82,7 +96,7 @@ void TDB_SetCursor(int col, int row) {
   write(STDOUT_FILENO, buffer, strlen(buffer));
 }
 
-TDB_Cursor TDB_GetCursor() {
+TDB_Pos TDB_GetCursor() {
   char col[5];
   char row[5];
   char c;
@@ -108,7 +122,7 @@ TDB_Cursor TDB_GetCursor() {
     col[i] = c;
   }
 
-  return (TDB_Cursor) { atoi(col), atoi(row) }; 
+  return (TDB_Pos) { atoi(col), atoi(row) }; 
 }
 
 void TDB_Write(const char * t, int x, int y) {
@@ -131,28 +145,53 @@ void TDB_Clear() {
 }
 
 static void beforeExit() {
+  #ifdef __unix__
   tcsetattr(STDIN_FILENO, TCSANOW, &_default);
-  TDB_Write("\x1b[?25h", 0, 0); // show-cursor
+  #endif
+
+  #ifdef _WIN32
+  SetConsoleMode(_input, _default);
+  #endif
+
+  TDB_ShowCursor();
   TDB_Clear();
 }
 
 void TDB_Setup(int blocking) {
+  #ifdef __unix__
   tcgetattr(STDIN_FILENO, &_default);
+  
   struct termios raw = _default;
-  atexit(beforeExit);
-
   raw.c_iflag &= ~(IXON);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-
   raw.c_cc[VMIN] = 0;
   raw.c_cc[VTIME] = blocking;
   
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-  TDB_Write("\x1b[?25l", 0, 0); // hide-cursor
+  #endif
+
+  #ifdef _WIN32
+  SetConsoleOutputCP(65001);
+  _input = GetStdHandle(STD_INPUT_HANDLE);
+  _output = GetStdHandle(STD_OUTPUT_HANDLE);
+  GetConsoleMode(_input, &_default);
+  
+  DWORD raw = _default;
+  raw &= ~(ENABLE_PROCESSED_INPUT | ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT);
+
+  SetConsoleMode(_input, raw);
+  #endif
+
+  atexit(beforeExit);
+  TDB_HideCursor();
 }
 
 int TDB_GetKey() {
-  char c;
+  char c; 
+
+  #ifdef _WIN32
+  if (!_kbhit()) return 0;
+  #endif
   
   if (read(STDIN_FILENO, &c, 1) != 1) return 0;
 
@@ -171,10 +210,19 @@ int TDB_GetKey() {
   return c;
 }
 
-TDB_Size TDB_GetSize() {
+TDB_Pos TDB_GetSize() {
+  #ifdef __unix__
   struct winsize w;
   ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-  return (TDB_Size) { w.ws_col, w.ws_row, w.ws_xpixel, w.ws_ypixel };
+  return (TDB_Pos) { w.ws_col, w.ws_row };
+  #endif
+
+  #ifdef _WIN32
+  CONSOLE_SCREEN_BUFFER_INFO w; 
+  GetConsoleScreenBufferInfo(_output, &w);
+  
+  return (TDB_Pos) { w.dwSize.X, w.dwSize.Y };
+  #endif
 }
 
 void TDB_DrawLine(const char * c, int x1, int y1, int x2, int y2) {
@@ -223,8 +271,8 @@ TDB_BitMap TDB_LoadBitMap(const char * file) {
   TDB_BitMap bitmap;
   FILE * stream = fopen(file, "r");
   
-  uint bit_per_pixel;
-  uint offset;
+  unsigned int bit_per_pixel;
+  unsigned int offset;
 
   if (stream == NULL) { fprintf(stderr, "TDB_LoadBitMap | %s | File stream not opened.\n", file); exit(EXIT_FAILURE); }
   if (fgetc(stream) != 'B' || fgetc(stream) != 'M') { fprintf(stderr, "TDB_LoadBitMap | %s | File not is a bitmap.\n", file); exit(EXIT_FAILURE); }
@@ -250,14 +298,14 @@ TDB_BitMap TDB_LoadBitMap(const char * file) {
   return bitmap;
 }
 
-void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y, int a) {
+void TDB_DrawBitMap(TDB_BitMap * bitmap, const char * c, int x, int y) {
   for (int px = 0; px < bitmap->width; px++) {
     for (int py = 0; py < bitmap->height; py++) {
-      uint of = bitmap->row_size * py + bitmap->bytes_per_pixel * px;
+      unsigned int of = bitmap->row_size * py + bitmap->bytes_per_pixel * px;
       if (bitmap->data[of+3] == 0) continue;
 
-      for (int p = 0; p < a; p++) {
-        TDB_WriteF(x + (px * a) - p, y + bitmap->height - py, "\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
+      for (int p = 0; p < 2; p++) {
+        TDB_WriteF(x + (px * 2) - p, y + bitmap->height - py, "\x1b[38;2;%u;%u;%um%s\x1b[0m\n", bitmap->data[of+2], bitmap->data[of+1], bitmap->data[of], c);
       }
     }
   }
