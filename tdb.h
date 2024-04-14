@@ -279,8 +279,7 @@ TDB_BitMap TDB_LoadBitMap(const char * file) {
   if (stream == NULL) { fprintf(stderr, "TDB_LoadBitMap | %s | File stream not opened.\n", file); exit(EXIT_FAILURE); }
   if (fgetc(stream) != 'B' || fgetc(stream) != 'M') { fprintf(stderr, "TDB_LoadBitMap | %s | File not is a bitmap.\n", file); exit(EXIT_FAILURE); }
 
-  fseek(stream, 4, SEEK_CUR);
-  fseek(stream, 4, SEEK_CUR);
+  fseek(stream, 10, SEEK_SET);
   fread(&offset, 4, 1, stream);
 
   fseek(stream, 4, SEEK_CUR);
@@ -292,7 +291,7 @@ TDB_BitMap TDB_LoadBitMap(const char * file) {
 
   bitmap.bytes_per_pixel = bit_per_pixel / 8;
   bitmap.row_size = (bit_per_pixel * bitmap.width + 31) / 32 * 4;
-  bitmap.data = (uint8_t *) malloc((bitmap.width * bitmap.height) * bitmap.bytes_per_pixel);
+  bitmap.data = (uint8_t *) malloc(bitmap.width * bitmap.height * bitmap.bytes_per_pixel);
 
   fseek(stream, offset, SEEK_SET);
   fread(bitmap.data, bitmap.bytes_per_pixel, bitmap.width * bitmap.height, stream);
